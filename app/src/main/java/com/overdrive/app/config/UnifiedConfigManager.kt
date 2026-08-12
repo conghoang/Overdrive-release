@@ -1849,6 +1849,18 @@ object UnifiedConfigManager {
     @JvmStatic
     fun setKeymap(keymap: JSONObject): Boolean = updateSection("keymap", keymap)
 
+    /** User-defined dashboard action buttons (durable custom Quick-controls).
+     *  Empty array when none configured. */
+    @JvmStatic
+    fun getDashboardActions(): org.json.JSONArray =
+        (loadConfig().optJSONObject("dashboard") ?: JSONObject()).optJSONArray("actions") ?: org.json.JSONArray()
+
+    /** Replace the dashboard custom-action list. Call off the main looper —
+     *  updateSection round-trips to the daemon. */
+    @JvmStatic
+    fun setDashboardActions(actions: org.json.JSONArray): Boolean =
+        updateSection("dashboard", JSONObject().put("actions", actions))
+
     /**
      * Recording-side dewarp strength (Fitzgibbon division model).
      *

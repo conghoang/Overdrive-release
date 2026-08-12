@@ -788,6 +788,11 @@ public class HttpServer {
             return MqttApiHandler.handle(method, path, body, out);
         }
 
+        // Dashboard custom actions (user-defined Quick-controls buttons)
+        if (path.startsWith("/api/dashboard/")) {
+            return DashboardActionsApiHandler.handle(method, path, body, out);
+        }
+
         // Automations API — plus the reusable Action Groups CRUD, which
         // AutomationApiHandler.handle() also implements but lives under the SEPARATE
         // /api/action-groups prefix (hyphen), so it must be routed here explicitly.

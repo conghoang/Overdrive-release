@@ -139,6 +139,12 @@
                                 <span data-i18n="dashboard.cmd_trips">Trips</span>
                             </a>
                         </div>
+                        <!-- User-defined custom actions, rendered from /api/dashboard/actions -->
+                        <div class="dash-command-grid" id="dashCustomGrid" hidden></div>
+                        <button class="dash-manage-actions" type="button" onclick="BYD.dashboard.manageActions()">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                            <span data-i18n="dashboard.custom_actions">Custom actions</span>
+                        </button>
                     </article>
 
                     <article class="dash-card dash-info-card" data-card-id="info">
@@ -634,6 +640,51 @@
             flex: 0 0 auto;
         }
 
+        .dash-command-emoji {
+            font-size: 22px;
+            line-height: 1;
+            flex: 0 0 auto;
+        }
+
+        .dash-manage-actions {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 12px;
+            padding: 6px 10px;
+            border: 1px dashed var(--border-subtle);
+            border-radius: 8px;
+            background: transparent;
+            color: var(--text-muted, #94a3b8);
+            font: inherit;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        .dash-manage-actions:hover { color: var(--text-primary, #e2e8f0); border-color: var(--brand-primary); }
+        .dash-manage-actions svg { width: 15px; height: 15px; }
+
+        .ca-list { margin: 4px 0 14px; display: flex; flex-direction: column; gap: 6px; }
+        .ca-empty { color: var(--text-muted, #94a3b8); font-size: 13px; margin: 6px 0; }
+        .ca-row {
+            display: flex; align-items: center; gap: 8px;
+            padding: 7px 10px; border: 1px solid var(--border-subtle); border-radius: 8px;
+        }
+        .ca-row-label { font-weight: 600; font-size: 14px; }
+        .ca-row-path { flex: 1; min-width: 0; color: var(--text-muted, #94a3b8); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .ca-row-del { border: none; background: transparent; color: var(--text-muted, #94a3b8); cursor: pointer; font-size: 15px; padding: 2px 4px; }
+        .ca-row-del:hover { color: #ef4444; }
+
+        .ca-form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+        .ca-form-row { display: flex; gap: 8px; }
+        .ca-input {
+            flex: 1; min-width: 0; box-sizing: border-box;
+            padding: 8px 10px; border: 1px solid var(--border-subtle); border-radius: 8px;
+            background: var(--surface-2, rgba(255,255,255,0.04)); color: inherit; font: inherit; font-size: 14px;
+        }
+        .ca-input-icon { flex: 0 0 64px; text-align: center; }
+        .ca-confirm { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--text-muted, #94a3b8); }
+        .ca-add { align-self: flex-start; }
+
         .dash-metric-grid {
             display: grid;
             grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -766,6 +817,190 @@
                 }).finally(function() {
                     btn.classList.remove('pending');
                 });
+            },
+            loadCustomActions: function() {
+                var grid = document.getElementById('dashCustomGrid');
+                if (!grid) return;
+                fetch('/api/dashboard/actions').then(function(r) {
+                    return r.json();
+                }).then(function(data) {
+                    if (!data || !data.success || !Array.isArray(data.actions) || !data.actions.length) return;
+                    grid.innerHTML = '';
+                    data.actions.forEach(function(a) {
+                        if (!a || !a.label || !a.path || a.path.charAt(0) !== '/') return;
+                        var btn = document.createElement('button');
+                        btn.type = 'button';
+                        btn.className = 'dash-command';
+                        if (a.icon) {
+                            var ic = document.createElement('span');
+                            ic.className = 'dash-command-emoji';
+                            ic.textContent = a.icon;
+                            btn.appendChild(ic);
+                        }
+                        var span = document.createElement('span');
+                        span.textContent = a.label;
+                        btn.appendChild(span);
+                        btn.addEventListener('click', function() {
+                            if (a.confirm && !window.confirm(a.label + '?')) return;
+                            BYD.dashboard.command(btn, a.path, a.payload);
+                        });
+                        grid.appendChild(btn);
+                    });
+                    grid.hidden = false;
+                }).catch(function() {});
+            },
+            manageActions: function() {
+                fetch('/api/dashboard/actions').then(function(r) { return r.json(); }).then(function(data) {
+                    var list = (data && data.success && Array.isArray(data.actions)) ? data.actions.slice() : [];
+                    BYD.dashboard._openActionsModal(list);
+                }).catch(function() { BYD.dashboard._openActionsModal([]); });
+            },
+            _openActionsModal: function(list) {
+                var t = function(k, d) { return (BYD.i18n && BYD.i18n.t(k)) || d; };
+                var backdrop = document.createElement('div');
+                backdrop.className = 'modal-backdrop';
+                backdrop.style.display = 'flex';
+                var card = document.createElement('div');
+                card.className = 'modal-card';
+                card.style.textAlign = 'left';
+
+                var h = document.createElement('h3');
+                h.className = 'soh-modal-title';
+                h.textContent = t('dashboard.custom_actions', 'Custom actions');
+                card.appendChild(h);
+
+                var listWrap = document.createElement('div');
+                listWrap.className = 'ca-list';
+                card.appendChild(listWrap);
+
+                function renderList() {
+                    listWrap.innerHTML = '';
+                    if (!list.length) {
+                        var empty = document.createElement('p');
+                        empty.className = 'ca-empty';
+                        empty.textContent = t('dashboard.custom_actions_empty', 'No custom actions yet.');
+                        listWrap.appendChild(empty);
+                        return;
+                    }
+                    list.forEach(function(a, idx) {
+                        var row = document.createElement('div');
+                        row.className = 'ca-row';
+                        var lbl = document.createElement('span');
+                        lbl.className = 'ca-row-label';
+                        lbl.textContent = (a.icon ? a.icon + ' ' : '') + a.label;
+                        var pth = document.createElement('span');
+                        pth.className = 'ca-row-path';
+                        pth.textContent = a.path;
+                        var del = document.createElement('button');
+                        del.type = 'button';
+                        del.className = 'ca-row-del';
+                        del.setAttribute('aria-label', 'Remove');
+                        del.textContent = '✕';
+                        del.addEventListener('click', function() { list.splice(idx, 1); renderList(); });
+                        row.appendChild(lbl);
+                        row.appendChild(pth);
+                        row.appendChild(del);
+                        listWrap.appendChild(row);
+                    });
+                }
+                renderList();
+
+                function input(ph) {
+                    var i = document.createElement('input');
+                    i.type = 'text';
+                    i.placeholder = ph;
+                    i.className = 'ca-input';
+                    return i;
+                }
+                var form = document.createElement('div');
+                form.className = 'ca-form';
+                var fIcon = input(t('dashboard.ca_icon', 'Icon'));
+                fIcon.maxLength = 4;
+                fIcon.classList.add('ca-input-icon');
+                var fLabel = input(t('dashboard.ca_label', 'Label'));
+                var fPath = input('/api/...');
+                var fPayload = input(t('dashboard.ca_payload', 'Payload JSON (optional)'));
+                var confirmWrap = document.createElement('label');
+                confirmWrap.className = 'ca-confirm';
+                var fConfirm = document.createElement('input');
+                fConfirm.type = 'checkbox';
+                confirmWrap.appendChild(fConfirm);
+                confirmWrap.appendChild(document.createTextNode(' ' + t('dashboard.ca_confirm', 'Confirm before running')));
+
+                var topRow = document.createElement('div');
+                topRow.className = 'ca-form-row';
+                topRow.appendChild(fIcon);
+                topRow.appendChild(fLabel);
+                form.appendChild(topRow);
+                form.appendChild(fPath);
+                form.appendChild(fPayload);
+                form.appendChild(confirmWrap);
+
+                var addBtn = document.createElement('button');
+                addBtn.type = 'button';
+                addBtn.className = 'btn btn-secondary ca-add';
+                addBtn.textContent = t('dashboard.ca_add', 'Add action');
+                addBtn.addEventListener('click', function() {
+                    var label = fLabel.value.trim();
+                    var path = fPath.value.trim();
+                    if (!label || path.charAt(0) !== '/') {
+                        BYD.utils.toast(t('dashboard.ca_invalid', 'A label and an /api path are required'), 'error');
+                        return;
+                    }
+                    var action = { label: label, path: path };
+                    if (fIcon.value.trim()) action.icon = fIcon.value.trim();
+                    if (fPayload.value.trim()) {
+                        try { action.payload = JSON.parse(fPayload.value.trim()); }
+                        catch (e) { BYD.utils.toast(t('dashboard.ca_bad_json', 'Payload is not valid JSON'), 'error'); return; }
+                    }
+                    if (fConfirm.checked) action.confirm = true;
+                    list.push(action);
+                    fIcon.value = ''; fLabel.value = ''; fPath.value = ''; fPayload.value = ''; fConfirm.checked = false;
+                    renderList();
+                });
+                form.appendChild(addBtn);
+                card.appendChild(form);
+
+                var actions = document.createElement('div');
+                actions.className = 'soh-modal-actions';
+                var cancel = document.createElement('button');
+                cancel.type = 'button';
+                cancel.className = 'btn btn-secondary';
+                cancel.textContent = t('common.cancel', 'Cancel');
+                cancel.addEventListener('click', close);
+                var save = document.createElement('button');
+                save.type = 'button';
+                save.className = 'btn btn-primary';
+                save.textContent = t('common.save', 'Save');
+                save.addEventListener('click', function() {
+                    save.disabled = true;
+                    fetch('/api/dashboard/actions', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ actions: list })
+                    }).then(function(r) { return r.json(); }).then(function(d) {
+                        if (d && d.success) {
+                            BYD.utils.toast(t('dashboard.ca_saved', 'Saved'), 'success');
+                            BYD.dashboard.loadCustomActions();
+                            close();
+                        } else {
+                            save.disabled = false;
+                            BYD.utils.toast(t('dashboard.ca_save_failed', 'Save failed'), 'error');
+                        }
+                    }).catch(function() {
+                        save.disabled = false;
+                        BYD.utils.toast(t('dashboard.ca_save_failed', 'Save failed'), 'error');
+                    });
+                });
+                actions.appendChild(cancel);
+                actions.appendChild(save);
+                card.appendChild(actions);
+
+                backdrop.appendChild(card);
+                backdrop.addEventListener('click', function(ev) { if (ev.target === backdrop) close(); });
+                document.body.appendChild(backdrop);
+
+                function close() { if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop); }
             },
             refreshVehicleState: function() {
                 fetch('/api/vehicle/state').then(function(r) {
@@ -928,6 +1163,7 @@
             BYD.core.init();
             if (BYD.map) BYD.map.init();
             BYD.dashboard.refreshVehicleState();
+            BYD.dashboard.loadCustomActions();
             setInterval(function() { BYD.dashboard.refreshVehicleState(); }, 6000);
         });
 
