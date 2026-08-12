@@ -62,6 +62,10 @@ tasks.matching { it.name.contains("CMake") || it.name.contains("ExternalNative")
 // OpenCV-mobile version for surveillance module (minimal build, ~3MB vs ~20MB)
 // https://github.com/nihui/opencv-mobile
 val opencvMobileVersion = "4.10.0"
+// opencv-mobile releases are tagged sequentially (v29, v30, v31, …), NOT as
+// vX.Y.Z — so the tag that carries a given version must be pinned explicitly.
+// v31 ships opencv-mobile-4.10.0-android.zip.
+val opencvMobileTag = "v31"
 tasks.register("downloadOpenCV") {
     val opencvDir = file("src/main/cpp/opencv")
     
@@ -76,8 +80,9 @@ tasks.register("downloadOpenCV") {
         if (!staticLib.exists()) {
             println("Downloading opencv-mobile ${opencvMobileVersion} for Android...")
             
-            // Correct URL format: /releases/download/vVERSION/
-            val zipUrl = "https://github.com/nihui/opencv-mobile/releases/download/v${opencvMobileVersion}/opencv-mobile-${opencvMobileVersion}-android.zip"
+            // Release URL: /releases/download/<tag>/ — tag is the sequential vNN
+            // (see opencvMobileTag), not v<version>.
+            val zipUrl = "https://github.com/nihui/opencv-mobile/releases/download/${opencvMobileTag}/opencv-mobile-${opencvMobileVersion}-android.zip"
             val zipFile = file("${opencvDir}/opencv-mobile-android.zip")
             
             try {
@@ -103,8 +108,8 @@ tasks.register("downloadOpenCV") {
                     val extractedDir = file("${opencvDir}/opencv-mobile-${opencvMobileVersion}-android")
                     
                     if (extractedDir.exists()) {
-                        // Copy arm64-v8a static libs
-                        val extractedLibDir = file("${extractedDir}/arm64-v8a/lib")
+                        // Copy arm64-v8a static libs (opencv-mobile SDK layout)
+                        val extractedLibDir = file("${extractedDir}/sdk/native/staticlibs/arm64-v8a")
                         if (extractedLibDir.exists()) {
                             extractedLibDir.listFiles()?.forEach { f ->
                                 println("  Copying lib: ${f.name}")
@@ -115,8 +120,8 @@ tasks.register("downloadOpenCV") {
                             println("⚠ Lib dir not found: ${extractedLibDir}")
                         }
                         
-                        // Copy headers
-                        val extractedInclude = file("${extractedDir}/arm64-v8a/include")
+                        // Copy headers (opencv-mobile SDK layout)
+                        val extractedInclude = file("${extractedDir}/sdk/native/jni/include")
                         if (extractedInclude.exists()) {
                             if (includeDir.exists()) includeDir.deleteRecursively()
                             extractedInclude.copyRecursively(includeDir, overwrite = true)
