@@ -68,6 +68,35 @@ class OverdriveApplication : Application() {
         // App-process listener that binds Telenav's OEM AIDL for the daemon's
         // HTTP endpoint (the daemon can't bindService itself). Idempotent.
         com.overdrive.app.telenav.TelenavIpcServer.start(this)
+
+        // Signal relays for the daemon (it cannot read call/Bluetooth state from
+        // UID 2000). Started HERE, on plain process start, and not only from
+        // KeepAliveAccessibilityService.onServiceConnected as before.
+        //
+        // Neither monitor needs accessibility for anything — they want a Context and
+        // nothing more. The a11y service was simply a convenient always-alive host,
+        // and that convenience quietly made them share its failure mode: when AMS
+        // leaves the service stuck in "Binding" (field-observed, recurring on this
+        // firmware), onServiceConnected never runs, so no receiver is registered and
+        // even the 60s re-assert never ticks. Bluetooth automations then see nothing
+        // at all — measured: 11+ minutes with the phone connected the whole time, and
+        // 92s even once the keymap watchdog learned to detect and recover the wedge.
+        //
+        // OverdriveApplication.onCreate runs on EVERY process start, so this brings
+        // the relays up within seconds of power-on regardless of whether the
+        // accessibility service ever binds. Both start() methods are synchronized and
+        // idempotent (they no-op while an instance is registered), so the a11y hook
+        // calling them again later is free, and neither call can throw into onCreate.
+        try {
+            com.overdrive.app.services.CallStateMonitor.start(this)
+        } catch (ignored: Throwable) {
+            // Guard only: the a11y hook calls start() again if it ever binds.
+        }
+        try {
+            com.overdrive.app.services.BluetoothStateMonitor.start(this)
+        } catch (ignored: Throwable) {
+            // Guard only: the a11y hook calls start() again if it ever binds.
+        }
     }
 
     /**
