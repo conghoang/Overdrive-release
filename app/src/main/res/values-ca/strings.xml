@@ -1253,7 +1253,6 @@
     <string name="rail_expand">Mostra les etiquetes de navegació</string>
     <string name="rail_collapse">Amaga les etiquetes de navegació</string>
     <string name="rail_collapse_label">Replega</string>
-
     <!-- Rail category headers -->
     <string name="rail_section_cameras">Càmeres</string>
     <string name="rail_section_controls">Controls</string>
@@ -1615,4 +1614,6 @@
     <string name="recording_distance_mid">Interval mitjà</string>
     <string name="recording_distance_far">Lluny</string>
     <string name="cd_recording_more_actions">Més accions d\'enregistrament</string>
+    <string name="toast_share_failed">Ha fallat la compartició</string>
+    <string name="vehicle_dialog_value_pending">—</string>
 </resources>
