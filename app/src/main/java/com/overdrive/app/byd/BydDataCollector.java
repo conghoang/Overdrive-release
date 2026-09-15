@@ -8591,6 +8591,57 @@ public class BydDataCollector {
     private final java.util.Map<Integer, Integer> lastPolledDoorState = new java.util.concurrent.ConcurrentHashMap<>();
 
     /**
+     * On-demand snapshot of open state for the six door/lid areas, in physical order
+     * [lf, rf, lr, rr, hood, trunk]: 1 = open, 0 = closed, -1 = unavailable on this trim.
+     *
+     * <p>Reads through the same {@code getDoorState(area)} path {@link #pollDoorStatesNow()}
+     * uses (the SDK reports areas 1..7; 1 = driver, 2 = passenger, 3 = rear-left, 4 = rear-right,
+     * 5 = hood, 6 = trunk — drive-side-independent). Areas 1/2 are folded to physical
+     * left/right using the user's drive-side preference, so the keys line up with the lock
+     * "doors" object. Unlike the poll, this ignores the DoorEvent gate — the caller (a state
+     * request) is itself the reason to read — but it's still on-demand, so it costs nothing
+     * until asked.
+     */
+    public int[] readDoorOpenStates() {
+        if (bodyworkDevice == null) return new int[] { -1, -1, -1, -1, -1, -1 };
+        // area 1 = driver, area 2 = passenger (both drive-side-independent). RHD driver is
+        // physically the right-front, LHD driver the left-front — mirror DoorEventNotifier.
+        boolean rhd = true;
+        try {
+            com.overdrive.app.config.UnifiedConfigManager.forceReload();
+            rhd = !"lhd".equalsIgnoreCase(com.overdrive.app.config.UnifiedConfigManager
+                    .getVehicle().optString("driveSide", "rhd"));
+        } catch (Throwable ignored) { /* default RHD, matches getVehicle() */ }
+        int driver = doorOpenState(1);
+        int passenger = doorOpenState(2);
+        return new int[] {
+            rhd ? passenger : driver, // lf
+            rhd ? driver : passenger, // rf
+            doorOpenState(3),         // lr
+            doorOpenState(4),         // rr
+            doorOpenState(5),         // hood
+            doorOpenState(6),         // trunk
+        };
+    }
+
+    /** Single-area open read via getDoorState: 1 = open, 0 = closed, -1 = unavailable/unreadable. */
+    private int doorOpenState(int area) {
+        try {
+            Object v = BydDeviceHelper.callMethod(bodyworkDevice, "getDoorState", area);
+            if (v instanceof Integer) {
+                int raw = (Integer) v;
+                if (raw == com.overdrive.app.byd.bodywork.BodyworkConstants.STATE_OPEN
+                        || raw == com.overdrive.app.byd.bodywork.BodyworkConstants.STATE_CLOSED) {
+                    return raw;
+                }
+            }
+        } catch (Exception ignored) {
+            // Getter absent on this trim → unavailable.
+        }
+        return -1;
+    }
+
+    /**
      * POLL-based door open/close fallback. The bodywork HAL delivers {@code onDoorStateChanged}
      * callbacks only while the vehicle is powered/awake — field reports show a parked car
      * stops pushing them, so a "when a door opens" automation never fired once the car was

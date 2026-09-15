@@ -860,6 +860,26 @@ public class VehicleControlApiHandler {
         if (data.bodyworkRangeKm != BydVehicleData.UNAVAILABLE) battery.put("bodyworkRangeKm", data.bodyworkRangeKm);
         response.put("battery", battery);
 
+        // Odometer: total distance plus the EV/HEV split for DM-i trims. Each key is
+        // omitted when the trim doesn't report that value (UNAVAILABLE), so a consumer
+        // can tell "no split on this vehicle" apart from a real zero.
+        JSONObject odometer = new JSONObject();
+        if (data.totalMileageKm != BydVehicleData.UNAVAILABLE) odometer.put("totalKm", data.totalMileageKm);
+        if (data.evMileageKm != BydVehicleData.UNAVAILABLE) odometer.put("evKm", data.evMileageKm);
+        if (data.hevMileageKm != BydVehicleData.UNAVAILABLE) odometer.put("hevKm", data.hevMileageKm);
+        response.put("odometer", odometer);
+
+        // Door/lid OPEN state (distinct from the lock state in "doors" above): 1 = open,
+        // 0 = closed; a key is omitted when the area is unreadable on this trim. Read live
+        // via the manager tier. "windows" (open percent) is already published above.
+        JSONObject doorsOpen = new JSONObject();
+        int[] open = collector.readDoorOpenStates();
+        String[] openKeys = {"lf", "rf", "lr", "rr", "hood", "trunk"};
+        for (int i = 0; i < openKeys.length && i < open.length; i++) {
+            if (open[i] != -1) doorsOpen.put(openKeys[i], open[i]);
+        }
+        response.put("doorsOpen", doorsOpen);
+
         // Lights
         JSONObject lights = new JSONObject();
         lights.put("lowBeam", data.lowBeam);

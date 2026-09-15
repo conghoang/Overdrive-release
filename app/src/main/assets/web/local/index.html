@@ -319,6 +319,9 @@
                             <!-- Value = SSID / Mobile Data / Ethernet; small = IPv4 when known -->
                             <div class="dash-metric"><span data-i18n="dashboard.metric_network">Network</span><strong id="dashNetwork">--</strong><small id="dashNetworkIp" style="display:none"></small></div>
                             <div class="dash-metric"><span data-i18n="dashboard.metric_lock">Lock</span><strong id="dashLock">--</strong></div>
+                            <!-- Odometer: hidden until /api/vehicle/state carries odometer.totalKm.
+                                 small = EV/HEV split on DM-i trims. -->
+                            <div class="dash-metric" id="dashOdoMetric" style="display:none"><span data-i18n="charge.detail_odometer">Odometer</span><strong id="dashOdo">--</strong><small id="dashOdoBreakdown" style="display:none"></small></div>
                         </div>
                     </article>
 
@@ -872,6 +875,10 @@
         .dash-car-door { fill: var(--text-tertiary, #9aa0a6); opacity: 0.5; }
         .dash-car-door.locked   { fill: var(--brand-primary); opacity: 1; }
         .dash-car-door.unlocked { fill: #f5a623; opacity: 1; }
+        /* Open takes visual priority over lock — an ajar door is the thing to notice. */
+        .dash-car-door.open     { fill: var(--danger, #e5484d); opacity: 1; }
+        @keyframes dashDoorOpenPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.55; } }
+        .dash-car-door.open     { animation: dashDoorOpenPulse 1.6s ease-in-out infinite; }
 
         .dash-car-tyre { fill: var(--border-default); }
         .dash-car-tyre.normal { fill: var(--brand-primary); opacity: 0.75; }
@@ -1885,14 +1892,20 @@
                     setRowState('glLockText', lockState === 'locked' ? 'good' : lockState === 'unlocked' ? 'warn' : '');
                     var glyph = document.getElementById('glLockGlyph');
                     if (glyph) glyph.setAttribute('class', 'dash-car-lock' + (lockState ? ' ' + lockState : ''));
-                    if (data.doors) {
+                    if (data.doors || data.doorsOpen) {
                         var doorMap = { lf: 'glDoorLF', rf: 'glDoorRF', lr: 'glDoorLR', rr: 'glDoorRR' };
+                        var lock = data.doors || {};
+                        var open = data.doorsOpen || {};
                         for (var dk in doorMap) {
                             var dEl = document.getElementById(doorMap[dk]);
                             if (!dEl) continue;
-                            var dv = data.doors[dk];
-                            dEl.setAttribute('class', 'dash-car-door'
-                                + (dv === 1 ? ' locked' : dv === 2 ? ' unlocked' : ''));
+                            // Priority: OPEN (all four doors report this) → red; otherwise the
+                            // lock state where it's known (on Di 3.0 that's the driver door only).
+                            var cls = 'dash-car-door';
+                            if (open[dk] === 1) cls += ' open';
+                            else if (lock[dk] === 1) cls += ' locked';
+                            else if (lock[dk] === 2) cls += ' unlocked';
+                            dEl.setAttribute('class', cls);
                         }
                     }
 
@@ -2103,6 +2116,30 @@
                 }
                 var lockEl = document.getElementById('dashLock');
                 if (lockEl) lockEl.textContent = lockText;
+
+                // Odometer: total distance, with the EV/HEV split as the sub-line on DM-i.
+                // Stays hidden on trims that don't report it.
+                var odo = data.odometer;
+                var odoMetric = document.getElementById('dashOdoMetric');
+                if (odoMetric) {
+                    if (odo && typeof odo.totalKm === 'number') {
+                        odoMetric.style.display = '';
+                        var odoEl = document.getElementById('dashOdo');
+                        if (odoEl) odoEl.textContent = odo.totalKm.toLocaleString() + ' km';
+                        var brk = document.getElementById('dashOdoBreakdown');
+                        if (brk) {
+                            if (typeof odo.evKm === 'number' && typeof odo.hevKm === 'number') {
+                                brk.style.display = '';
+                                brk.textContent = odo.evKm.toLocaleString() + ' km EV · '
+                                    + odo.hevKm.toLocaleString() + ' km fuel';
+                            } else {
+                                brk.style.display = 'none';
+                            }
+                        }
+                    } else {
+                        odoMetric.style.display = 'none';
+                    }
+                }
                 this.glance.update(data, lockText, lockState);
             },
             renderHalRange: function(status) {
