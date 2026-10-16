@@ -8,7 +8,7 @@ package com.overdrive.app.ui.daemon
  * cloudflared runs with `--retries 20`. When the parked car's data link drops repeatedly, each
  * connection's backoff doubles (4m16s → 8m32s → 17m4s → 34m8s …) until the retry budget is spent;
  * the connection goroutines then exit with `Connection terminated` but the PROCESS stays up with
- * zero edge connections. Field incident (Seal U, 55.3): the tunnel sat dead for 1.5 h after a
+ * zero edge connections. Field incident (Sealion 6, 55.3): the tunnel sat dead for 1.5 h after a
  * parked drop while `ps` — the only liveness signal the 30s health check and
  * `TunnelLauncher.launchCloudflared` ("already running → reuse") look at — kept reporting it
  * healthy. Killing the process let the health check relaunch it, and the fresh process registered
