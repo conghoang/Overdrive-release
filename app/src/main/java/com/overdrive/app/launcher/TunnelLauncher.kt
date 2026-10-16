@@ -457,6 +457,40 @@ class TunnelLauncher(
     
 
     /**
+     * Check whether cloudflared holds at least one live edge connection.
+     *
+     * [isTunnelRunning] only proves the process exists; cloudflared stays alive with zero
+     * connections once its `--retries` budget is spent (see CloudflaredEdgeWatch). This looks for
+     * an ESTABLISHED (`01`) TCP socket whose REMOTE port is the edge's 7844 (0x1EA4), or the
+     * sing-box proxy's 8119 (0x1FB7) when the tunnel was launched through it. In /proc/net/tcp a
+     * local `ADDR:PORT` is always followed by the remote address, never by ` 01 `, so the pattern
+     * can only match a remote port. HTTP/2 is forced in CloudflaredPaidConfig.getArgs, so TCP is
+     * the only transport to check.
+     *
+     * Callback: true = connected, false = no connection, null = unknown (probe failed or /proc
+     * unreadable) — callers must treat null as "don't act".
+     */
+    fun hasEdgeConnection(callback: (Boolean?) -> Unit) {
+        adbShellExecutor.execute(
+            command = "head -1 /proc/net/tcp 2>/dev/null | grep -q local_address || { echo EDGE_UNKNOWN; exit 0; }; " +
+                "grep -qiE ':(1EA4|1FB7) 01 ' /proc/net/tcp /proc/net/tcp6 2>/dev/null && echo EDGE_UP || echo EDGE_DOWN",
+            callback = object : AdbShellExecutor.ShellCallback {
+                override fun onSuccess(output: String) {
+                    callback(when {
+                        output.contains("EDGE_UP") -> true
+                        output.contains("EDGE_DOWN") -> false
+                        else -> null
+                    })
+                }
+
+                override fun onError(error: String) {
+                    callback(null)
+                }
+            }
+        )
+    }
+
+    /**
      * Check if tunnel is running.
      */
     fun isTunnelRunning(callback: (Boolean) -> Unit) {

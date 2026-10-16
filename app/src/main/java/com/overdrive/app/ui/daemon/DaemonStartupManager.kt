@@ -1308,8 +1308,37 @@ class DaemonStartupManager(
                         log.warn(TAG, "Health check: ${type.displayName} is DEAD — relaunching...")
                         relaunchDaemon(type)
                     }
+                } else if (type == DaemonType.CLOUDFLARED_TUNNEL) {
+                    checkCloudflaredEdge()
                 }
             }
+        }
+    }
+
+    /**
+     * cloudflared can be alive with zero edge connections once its `--retries` budget is spent —
+     * `ps` says healthy, the tunnel is dead. Probe the edge socket and, when
+     * [CloudflaredEdgeWatch] says the outage has outlasted its window, kill the process and hand
+     * it to [relaunchDaemon] — the same sentinel/park-marker gate a crash goes through. If that
+     * gate says "stopped", the process stays down, which is what the stop intent wanted anyway.
+     */
+    private fun checkCloudflaredEdge() {
+        adbLauncher.hasTunnelEdgeConnection { connected ->
+            if (connected == false) {
+                log.info(TAG, "Health check: Cloudflared alive but has no edge connection " +
+                    "(restart after ${CloudflaredEdgeWatch.currentRestartAfterMs() / 1000}s down)")
+            }
+            if (!CloudflaredEdgeWatch.onProbe(connected, System.currentTimeMillis())) return@hasTunnelEdgeConnection
+            log.warn(TAG, "Health check: Cloudflared has had no edge connection past its window — " +
+                "killing the stuck process and relaunching")
+            adbLauncher.stopTunnel(object : AdbDaemonLauncher.LaunchCallback {
+                override fun onLog(message: String) {}
+                override fun onLaunched() { relaunchDaemon(DaemonType.CLOUDFLARED_TUNNEL) }
+                override fun onError(error: String) {
+                    log.warn(TAG, "Health check: stopping stuck Cloudflared failed ($error) — " +
+                        "next tick will retry")
+                }
+            })
         }
     }
 

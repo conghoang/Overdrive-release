@@ -283,7 +283,14 @@ class AdbDaemonLauncher(private val context: Context) {
     fun isTunnelRunning(callback: (Boolean) -> Unit) {
         tunnelLauncher.isTunnelRunning(callback)
     }
-    
+
+    /**
+     * Check whether cloudflared has a live edge connection (null = unknown).
+     */
+    fun hasTunnelEdgeConnection(callback: (Boolean?) -> Unit) {
+        tunnelLauncher.hasEdgeConnection(callback)
+    }
+
     /**
      * Get current tunnel URL from log file.
      */
