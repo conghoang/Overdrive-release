@@ -25,6 +25,10 @@ class TunnelLauncher(
         // Process name for identification
         private const val CLOUDFLARED_PROCESS = "cloudflared"
 
+        // Cloudflare's published tunnel edge addresses (region1 / region2 anycast, plus one
+        // IPv6), all on port 7844. Used only as a reachability probe — see canReachEdge().
+        private const val EDGE_PROBE_ADDRESSES = "198.41.192.7 198.41.200.13 2606:4700:a0::1"
+
         private val launchLock = Any()
         private var activeLaunch: LaunchFlight? = null
         private val launchGuardScheduler =
@@ -479,6 +483,42 @@ class TunnelLauncher(
                     callback(when {
                         output.contains("EDGE_UP") -> true
                         output.contains("EDGE_DOWN") -> false
+                        else -> null
+                    })
+                }
+
+                override fun onError(error: String) {
+                    callback(null)
+                }
+            }
+        )
+    }
+
+    /**
+     * Check whether the car can reach Cloudflare's tunnel edge at all right now.
+     *
+     * Used before restarting a tunnel that has no edge connection: with no usable network a
+     * restart cannot help. A route or "network connected" flag is not enough — Wi-Fi without
+     * upstream internet still has both — so this opens a TCP connection to Cloudflare's
+     * published tunnel edge addresses (region1/region2 anycast, IPv4 and IPv6) on 7844.
+     *
+     * Callback: true = edge reachable, false = none reachable, null = cannot tell. Unknown when
+     * `nc` is missing or the sing-box proxy is listening (a direct connect says nothing about
+     * the proxied path cloudflared actually uses).
+     */
+    fun canReachEdge(callback: (Boolean?) -> Unit) {
+        adbShellExecutor.execute(
+            command = "grep -qiE ':1FB7 [0-9A-F:]+ 0A ' /proc/net/tcp /proc/net/tcp6 2>/dev/null && { echo NET_UNKNOWN; exit 0; }; " +
+                "command -v nc >/dev/null 2>&1 || { echo NET_UNKNOWN; exit 0; }; " +
+                // Probe all addresses in parallel: this runs on the shared single-thread ADB
+                // executor, and serial 3 s timeouts would park it ~12 s per tick while offline.
+                "r=\$(for ip in $EDGE_PROBE_ADDRESSES; do (echo | nc -w 3 \$ip 7844 >/dev/null 2>&1 && echo up) & done; wait); " +
+                "case \"\$r\" in *up*) echo NET_UP;; *) echo NET_DOWN;; esac",
+            callback = object : AdbShellExecutor.ShellCallback {
+                override fun onSuccess(output: String) {
+                    callback(when {
+                        output.contains("NET_UP") -> true
+                        output.contains("NET_DOWN") -> false
                         else -> null
                     })
                 }

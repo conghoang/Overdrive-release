@@ -292,6 +292,13 @@ class AdbDaemonLauncher(private val context: Context) {
     }
 
     /**
+     * Check whether Cloudflare's tunnel edge is reachable from the car (null = unknown).
+     */
+    fun canReachTunnelEdge(callback: (Boolean?) -> Unit) {
+        tunnelLauncher.canReachEdge(callback)
+    }
+
+    /**
      * Get current tunnel URL from log file.
      */
     fun getTunnelUrl(callback: (String?) -> Unit) {
